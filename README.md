@@ -5,19 +5,17 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.1+](https://img.shields.io/badge/PyTorch-2.1+-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style=black-000000.svg)](https://github.com/psf/black)
-[![Tests](https://img.shields.io/badge/tests-132%20passed-brightgreen.svg)]()
-[![Paper](https://img.shields.io/badge/paper-arXiv-red.svg)]()
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://img.shields.io/badge/tests-132%20passed-brightgreen.svg)](docs/TESTCASES.md)
+[![Docs](https://img.shields.io/badge/docs-complete-blue.svg)](docs/)
 
 **Foundation Models for Whole-Body MRI: Self-Supervised Learning, Multimodal Fusion & Clinical Translation**
 
 [Installation](#installation) •
 [Quick Start](#quick-start) •
-[Pre-training](#pre-training) •
-[Fine-tuning](#fine-tuning) •
-[Results](#results) •
-[Documentation](#documentation) •
-[Citation](#citation) •
+[Documentation](docs/ARCHITECTURE.md) •
+[Tests](docs/TESTCASES.md) •
+[Contributing](docs/CONTRIBUTING.md) •
 [License](#license)
 
 </div>
@@ -68,9 +66,8 @@ docker run --gpus all -it --rm med-fm:latest
 ### 1. Self-Supervised Pre-training (MAE-style)
 
 ```python
-from medfm import MaskedAutoencoderViT, PretrainConfig
+from medfm import MaskedAutoencoderViT
 
-# Initialize model
 model = MaskedAutoencoderViT(
     img_size=518,
     patch_size=16,
@@ -78,191 +75,49 @@ model = MaskedAutoencoderViT(
     embed_dim=768,
     depth=12,
     num_heads=12,
-    decoder_embed_dim=512,
-    decoder_depth=8,
-    decoder_num_heads=16,
     mask_ratio=0.75,
 )
-
-# Configure pre-training
-config = PretrainConfig(
-    data_path="/path/to/whole-body-mri/",
-    epochs=800,
-    batch_size=256,
-    lr=1.5e-4,
-    warmup_epochs=40,
-    weight_decay=0.05,
-)
-
-# Launch distributed pre-training
-from medfm.train import pretrain
-pretrain(model, config)
 ```
 
-### 2. Multi-modal Fusion (Imaging + Clinical)
+### 2. Multi-modal Fusion
 
 ```python
-from medfm import MultimodalMRI, FusionConfig
+from medfm import MultimodalMRI
 
 model = MultimodalMRI(
     backbone="vit_base_patch16",
-    clinical_dim=256,        # structured clinical features
-    radiology_dim=768,       # radiology report embeddings
+    clinical_dim=256,
+    radiology_dim=768,
     fusion_type="cross_attention",
 )
-
-config = FusionConfig(
-    imaging_path="/path/to/mri/",
-    clinical_path="/path/to/clinical_data.csv",
-    radiology_path="/path/to/reports/",
-)
-
-from medfm.train import train_multimodal
-train_multimodal(model, config)
 ```
 
 ### 3. Fine-tuning for Downstream Tasks
 
 ```python
-from medfm import build_model, FineTuneConfig
+from medfm import build_model
 
-# Segmentation: Organ / Lesion / Body Composition
-model = build_model(
-    task="segmentation",
-    backbone="vit_base_patch16",
-    num_classes=30,  # multi-organ
-    pretrained=True,
-)
+# Segmentation
+model = build_model(task="segmentation", backbone="vit_base_patch16", num_classes=30)
 
-# Detection: Lesion detection
-model = build_model(
-    task="detection",
-    backbone="vit_base_patch16",
-    num_classes=5,
-    pretrained=True,
-)
+# Classification
+model = build_model(task="classification", backbone="vit_base_patch16", num_classes=10)
 
-# Classification: Disease classification
-model = build_model(
-    task="classification",
-    backbone="vit_base_patch16",
-    num_classes=10,
-    pretrained=True,
-)
-
-# Biomarker Extraction: Quantitative biomarkers
-model = build_model(
-    task="biomarker",
-    backbone="vit_base_patch16",
-    biomarker_dims=50,  # e.g., visceral fat, liver fat, etc.
-    pretrained=True,
-)
+# Biomarker Extraction
+model = build_model(task="biomarker", backbone="vit_base_patch16", biomarker_dims=50)
 ```
 
 ---
 
-## Pre-training Strategies
+## Documentation
 
-### Masked Image Modeling (MIM)
-
-| Method | Mask Ratio | Epochs | Batch Size | Linear Eval Acc. |
-|--------|-----------|--------|------------|------------------|
-| MAE-ViT-B/16 | 0.75 | 800 | 256 | 78.3% |
-| MAE-ViT-L/16 | 0.75 | 800 | 256 | 81.2% |
-| MAE-ViT-H/14 | 0.75 | 800 | 256 | 83.5% |
-
-### Contrastive Learning
-
-| Method | Augmentations | Epochs | Linear Eval Acc. |
-|--------|-------------|--------|------------------|
-| SimCLR | MRI-specific | 1000 | 75.8% |
-| DINO | MRI-specific | 800 | 79.1% |
-| iBOT | Hybrid MIM+CL | 800 | 82.4% |
-
-### Joint Embedding Predictive Architecture (JEPA)
-
-| Method | Predictor | Epochs | Linear Eval Acc. |
-|--------|-----------|--------|------------------|
-| I-JEPA | ViT-B/16 | 600 | 80.7% |
-| V-JEPA | ViT-L/16 | 600 | 83.1% |
-
----
-
-## Multimodal Fusion
-
-### Supported Modalities
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                  Whole-Body MRI                          │
-│              (Imaging Foundation Model)                  │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        │             │             │
-        ▼             ▼             ▼
-┌──────────────┐ ┌──────────┐ ┌──────────────┐
-│  Radiology   │ │   Lab    │ │  Structured  │
-│   Reports    │ │  Values  │ │    Patient   │
-│  (Text LLM)  │ │ (Tabular)│ │    Data      │
-└──────┬───────┘ └────┬─────┘ └──────┬───────┘
-       │              │              │
-       └──────────────┼──────────────┘
-                      │
-                      ▼
-            ┌───────────────────┐
-            │   Fusion Module   │
-            │  (Cross-Attention │
-            │   + Concatenation)│
-            └─────────┬─────────┘
-                      │
-                      ▼
-            ┌───────────────────┐
-            │  Clinical Output  │
-            │  (Diagnosis, Risk │
-            │   Score, Biomarker)│
-            └───────────────────┘
-```
-
-### Fusion Strategies
-
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| **Cross-Attention** | Imaging tokens attend to clinical tokens | Complex interactions |
-| **Concatenation** | Simple feature concatenation | Fast inference |
-| **Gated Fusion** | Learnable gating mechanism | Modality imbalance |
-| **Tensor Fusion** | Outer product of modalities | Rich interactions |
-
----
-
-## Results
-
-### Whole-Body MRI Segmentation (DSC)
-
-| Method | Liver | Kidney | Spleen | Pancreas | Aorta | Mean |
-|--------|-------|--------|--------|----------|-------|------|
-| U-Net | 0.94 | 0.92 | 0.91 | 0.85 | 0.93 | 0.91 |
-| nnU-Net | 0.96 | 0.94 | 0.93 | 0.88 | 0.95 | 0.93 |
-| **Med-FM (ViT-B/16)** | **0.97** | **0.96** | **0.95** | **0.91** | **0.97** | **0.95** |
-| **Med-FM (ViT-L/16)** | **0.98** | **0.97** | **0.96** | **0.93** | **0.98** | **0.96** |
-
-### Disease Classification (AUC)
-
-| Method | Cardiovascular | Cancer | Metabolic | Neurodegenerative | Mean |
-|--------|---------------|--------|-----------|-------------------|------|
-| ResNet-50 | 0.82 | 0.79 | 0.85 | 0.81 | 0.82 |
-| ViT-B/16 (supervised) | 0.89 | 0.87 | 0.91 | 0.88 | 0.89 |
-| **Med-FM (pre-trained)** | **0.94** | **0.93** | **0.96** | **0.93** | **0.94** |
-
-### Biomarker Extraction (MAE)
-
-| Biomarker | Units | MAE | R² |
-|-----------|-------|-----|-----|
-| Visceral Fat Volume | L | 0.12 | 0.94 |
-| Liver Fat Fraction | % | 1.8 | 0.91 |
-| Muscle Volume | L | 0.08 | 0.96 |
-| Bone Mineral Density | g/cm² | 0.03 | 0.89 |
-| Aortic Diameter | mm | 0.4 | 0.93 |
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, workflow diagrams, job alignment |
+| [TESTCASES.md](docs/TESTCASES.md) | Detailed test cases (132 tests, 100% pass rate) |
+| [TEST_RESULTS.md](docs/TEST_RESULTS.md) | Test execution results and metrics |
+| [FUTURE_WORK.md](docs/FUTURE_WORK.md) | Roadmap and future development plans |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution guidelines |
 
 ---
 
@@ -279,7 +134,7 @@ model = build_model(
 | Utilities | 5 | 5 | 0 |
 | **Total** | **132** | **132** | **0** |
 
-See [TEST_RESULTS.md](TEST_RESULTS.md) for detailed results.
+See [docs/TESTCASES.md](docs/TESTCASES.md) for detailed test cases.
 
 ---
 
@@ -287,104 +142,63 @@ See [TEST_RESULTS.md](TEST_RESULTS.md) for detailed results.
 
 ```
 Med-Foundation-Models/
-├── medfm/
-│   ├── models/
-│   │   ├── vit.py              # Vision Transformer implementations
+├── medfm/                      # Main package
+│   ├── models/                 # Model implementations
+│   │   ├── vit.py              # Vision Transformer
 │   │   ├── mae.py              # Masked Autoencoder
-│   │   ├── jepa.py             # Joint Embedding Predictive Architecture
-│   │   ├── contrastive.py      # SimCLR, DINO, iBOT
-│   │   ├── multimodal.py       # Multimodal fusion models
+│   │   ├── jepa.py             # JEPA
+│   │   ├── contrastive.py      # SimCLR, DINO
+│   │   ├── multimodal.py       # Multimodal fusion
 │   │   ├── segmentation.py     # Segmentation heads
 │   │   ├── detection.py        # Detection heads
 │   │   ├── classification.py   # Classification heads
-│   │   └── biomarker.py        # Biomarker extraction heads
-│   ├── data/
-│   │   ├── mri_dataset.py      # Whole-body MRI dataset
-│   │   ├── clinical_dataset.py # Clinical data loader
-│   │   ├── augmentations.py    # MRI-specific augmentations
-│   │   └── transforms.py       # Spatial/intensity transforms
-│   ├── train/
-│   │   ├── pretrain.py         # Self-supervised pre-training
-│   │   ├── finetune.py         # Fine-tuning scripts
-│   │   ├── distributed.py      # Distributed training utilities
-│   │   └── optimizers.py       # Optimizer + scheduler
-│   ├── eval/
-│   │   ├── segmentation.py     # DSC, HD95 metrics
-│   │   ├── classification.py   # AUC, sensitivity, specificity
-│   │   ├── biomarker.py        # MAE, R² metrics
-│   │   └── clinical.py         # Clinical validation metrics
-│   └── utils/
-│       ├── distributed.py      # DDP utilities
+│   │   └── biomarker.py        # Biomarker heads
+│   ├── data/                   # Data pipelines
+│   │   ├── mri_dataset.py      # MRI dataset
+│   │   ├── clinical_dataset.py # Clinical dataset
+│   │   └── transforms.py       # Transforms
+│   ├── train/                  # Training utilities
+│   │   ├── pretrain.py         # Pre-training
+│   │   ├── finetune.py         # Fine-tuning
+│   │   ├── distributed.py      # Distributed training
+│   │   └── optimizers.py       # Optimizers
+│   ├── eval/                   # Evaluation metrics
+│   │   ├── segmentation.py     # Segmentation metrics
+│   │   ├── classification.py   # Classification metrics
+│   │   ├── biomarker.py        # Biomarker metrics
+│   │   └── clinical.py         # Clinical metrics
+│   └── utils/                  # Utilities
+│       ├── checkpointing.py    # Model I/O
 │       ├── logging.py          # Experiment tracking
-│       └── checkpointing.py    # Model I/O
-├── configs/
-│   ├── pretrain/
-│   │   ├── mae_vit_base.yaml
-│   │   ├── mae_vit_large.yaml
-│   │   ├── jepa_vit_base.yaml
-│   │   └── simclr_vit_base.yaml
-│   ├── finetune/
-│   │   ├── segmentation.yaml
-│   │   ├── detection.yaml
-│   │   ├── classification.yaml
-│   │   └── biomarker.yaml
-│   └── multimodal/
-│       └── fusion_base.yaml
-├── scripts/
-│   ├── pretrain.sh
-│   ├── finetune.sh
-│   ├── evaluate.sh
-│   └── export.sh
-├── tests/
+│       └── distributed.py      # Distributed helpers
+├── docs/                       # Documentation
+│   ├── ARCHITECTURE.md         # Architecture & workflow
+│   ├── TESTCASES.md            # Test cases
+│   ├── TEST_RESULTS.md         # Test results
+│   ├── FUTURE_WORK.md          # Roadmap
+│   └── CONTRIBUTING.md         # Contribution guidelines
+├── tests/                      # Test suite
 │   ├── conftest.py             # Shared fixtures
-│   ├── models/                 # Model tests (132 total)
-│   ├── data/                   # Data loading tests
+│   ├── models/                 # Model tests
+│   ├── data/                   # Data tests
 │   ├── train/                  # Training tests
-│   ├── eval/                   # Evaluation metric tests
+│   ├── eval/                   # Evaluation tests
 │   └── utils/                  # Utility tests
-├── docs/
-├── examples/
-│   ├── pretrain_mae.ipynb
-│   ├── finetune_segmentation.ipynb
-│   ├── multimodal_fusion.ipynb
-│   └── biomarker_extraction.ipynb
-├── requirements.txt
-├── setup.py
-├── pyproject.toml
-├── Dockerfile
-├── LICENSE
-├── TEST_RESULTS.md             # Detailed test results
-└── README.md
+├── configs/                    # Configuration files
+├── scripts/                    # Execution scripts
+├── examples/                   # Example notebooks
+├── requirements.txt            # Dependencies
+├── pyproject.toml              # Package metadata
+├── Dockerfile                  # Docker configuration
+├── LICENSE                     # MIT License
+└── README.md                   # This file
 ```
-
----
-
-## Documentation
-
-### Model Zoo
-
-| Model | Pre-training | Params | Download |
-|-------|-------------|--------|----------|
-| MAE-ViT-B/16 | 800 epochs, 518px | 86M | [🔗](#) |
-| MAE-ViT-L/16 | 800 epochs, 518px | 304M | [🔗](#) |
-| MAE-ViT-H/14 | 800 epochs, 518px | 632M | [🔗](#) |
-| I-JEPA-ViT-B/16 | 600 epochs | 86M | [🔗](#) |
-| I-JEPA-ViT-L/16 | 600 epochs | 304M | [🔗](#) |
-| Med-FM-Multimodal | 800 epochs | 120M | [🔗](#) |
-
-### Pre-training Data Requirements
-
-| Dataset | Size | Resolution | Slices | Patients |
-|---------|------|------------|--------|----------|
-| Internal Whole-Body MRI | ~50K scans | 518×518 | 200-400 | ~30K |
-| UK Biobank (subsample) | ~10K scans | 256×256 | 150-250 | ~8K |
-| FastMRI+ | ~5K scans | 320×320 | 20-30 | ~3K |
 
 ---
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
 
 ### Development Setup
 
@@ -392,30 +206,12 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 git clone https://github.com/MrKyaw/Med-Foundation-Models.git
 cd Med-Foundation-Models
 pip install -e ".[dev]"
-pre-commit install
 ```
 
 ### Running Tests
 
 ```bash
-pytest tests/ -v --tb=short
-```
-
----
-
-## Citation
-
-If you find this work useful, please cite:
-
-```bibtex
-@software{medfm2024,
-  author = {Kyaw, Mr},
-  title = {Med-Foundation-Models: Foundation Models for Whole-Body MRI},
-  year = {2024},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/MrKyaw/Med-Foundation-Models}}
-}
+pytest tests/ -v
 ```
 
 ---
